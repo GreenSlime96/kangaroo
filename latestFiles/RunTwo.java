@@ -55,7 +55,7 @@ public class RunTwo {
 		
 		//Hard assigner for visual words learned from the pixel patches of a subset of all training data
 		HardAssigner<float[], float[], IntFloatPair> assigner = 
-				trainQuantiser(GroupedUniformRandomisedSampler.sample(allData, 100), densePatch);
+				trainQuantiser(GroupedUniformRandomisedSampler.sample(allData, 100), densePatch, 500);
 	
 		//FeatureExtractor based on bag-of-visual-words built from dense pixel patches
 		FeatureExtractor<DoubleFV, FImage> extractor = new BOVWDensePatchExtractor(densePatch, assigner);
@@ -82,10 +82,11 @@ public class RunTwo {
 	 * be used on the testing set.
 	 */
 	static HardAssigner<float[], float[], IntFloatPair> trainQuantiser(
-	        Dataset<FImage> sample, DensePatch densePatch)
+			Dataset<FImage> sample, DensePatch densePatch, int clusters)
 	{
 		//list to contain all pixel patches from our images
 		List<LocalFeatureList<FloatKeypoint>> allkeys = new ArrayList<LocalFeatureList<FloatKeypoint>>();
+		
 		
 		for (FImage rec : sample) {
 		
@@ -97,7 +98,7 @@ public class RunTwo {
 		}
 		
 		//we get an object ready to perform approximate K-means clustering based on KD Trees
-		FloatKMeans km = FloatKMeans.createKDTreeEnsemble(500);
+		FloatKMeans km = FloatKMeans.createKDTreeEnsemble(clusters);
 		
 		//get all Ddense patches  in a Data Source
 		DataSource<float[]> datasource = new LocalFeatureListDataSource<FloatKeypoint, float[]>(allkeys);

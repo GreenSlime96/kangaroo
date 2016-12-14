@@ -4,7 +4,6 @@ import java.util.Map;
 
 import org.apache.commons.vfs2.FileSystemException;
 import org.openimaj.data.dataset.VFSGroupDataset;
-import org.openimaj.experiment.dataset.sampling.GroupedUniformRandomisedSampler;
 import org.openimaj.experiment.dataset.split.GroupedRandomSplitter;
 import org.openimaj.experiment.evaluation.classification.ClassificationEvaluator;
 import org.openimaj.experiment.evaluation.classification.ClassificationResult;
@@ -14,22 +13,21 @@ import org.openimaj.feature.DoubleFV;
 import org.openimaj.feature.FeatureExtractor;
 import org.openimaj.image.FImage;
 import org.openimaj.image.ImageUtilities;
+import org.openimaj.image.feature.global.Gist;
 import org.openimaj.ml.annotation.linear.LiblinearAnnotator;
 import org.openimaj.ml.annotation.linear.LiblinearAnnotator.Mode;
-import org.openimaj.ml.clustering.assignment.HardAssigner;
-import org.openimaj.util.pair.IntFloatPair;
+import org.openimaj.ml.kernel.HomogeneousKernelMap;
+import org.openimaj.ml.kernel.HomogeneousKernelMap.KernelType;
+import org.openimaj.ml.kernel.HomogeneousKernelMap.WindowType;
 
 import de.bwaldvogel.liblinear.SolverType;
 
 /**
- * Class RunTwoTest - Test class for the Bag-of-visual-words linear classifiers 
- * using fixed size densely-sampled pixel patches algorithm.
- * It is used to estimate the best parameters to use when classifying the test dataset.
+ * Class RunThreeTestGIST- Test implementation for our run three with the GIST feature.
  * 
  * @author nb4g14 and kbp2g14
  */
-public class RunTwoTest {
-	
+public class RunThreeTestGIST {
 	public static void main(String[] args) throws FileSystemException {
 		
 		// ----------------------------------- Load the data -----------------------------------------
@@ -40,33 +38,23 @@ public class RunTwoTest {
 		final VFSGroupDataset<FImage> allData = 
 				new VFSGroupDataset<FImage>(directory + "training", ImageUtilities.FIMAGE_READER);
 		
+		
 		final GroupedRandomSplitter<String, FImage> splits = new GroupedRandomSplitter<String, FImage>(allData, 75, 0, 25);
 		
 		// ------------------------------------   Execution   -----------------------------------------
 		
-		System.out.println("Images loaded!");
+		//HomogeneousKernelMap to provide for non-linearity
+		HomogeneousKernelMap hkm = new HomogeneousKernelMap(KernelType.Chi2, WindowType.Rectangular);
 		
-		//instance to provide the fixed-sized densely-sampled pixel patches for an image
-		DensePatch densePatch=new DensePatch(4, 4, 8, 8);
+		//feature extractor for our class
+		FeatureExtractor<DoubleFV, FImage> extractor = hkm.createWrappedExtractor(new GISTExtractor());
 		
-		//Hard assigner for visual words learned from the pixel patches of a subset of the training data
-		HardAssigner<float[], float[], IntFloatPair> assigner = 
-				RunTwo.trainQuantiser(GroupedUniformRandomisedSampler.sample(splits.getTrainingDataset(), 100), densePatch, 500);
-	
-		System.out.println("Assigner trained!");
 		
-		//FeatureExtractor based on bag-of-visual-words built from dense pixel patches
-		FeatureExtractor<DoubleFV, FImage> extractor = new BOVWDensePatchExtractor(densePatch, assigner);
-		
-		//train the annotator
+		//Perform linear classification
 		LiblinearAnnotator<FImage, String> ann = new LiblinearAnnotator<FImage, String>(
 	            extractor, Mode.MULTICLASS, SolverType.L2R_L2LOSS_SVC, 1.0, 0.00001);
 		ann.train(splits.getTrainingDataset());
-		
-		System.out.println("Linear classifiers trained!");
 
-		//------------------------------------ Evaluate --------------------------------------
-		
 		//Construct an evaluator
 		ClassificationEvaluator<CMResult<String>, String, FImage> eval = 
 				new ClassificationEvaluator<CMResult<String>, String, FImage>(
@@ -78,7 +66,30 @@ public class RunTwoTest {
 		
 		//print the report
 		System.out.println(result.getDetailReport());
+		
 	}
+	
+	/**
+	 * Class GISTExtractor - a simple extractor for the GIST feature
+	 * @author nb4g14 and kbp2g14
+	 */
+	static class GISTExtractor implements FeatureExtractor<DoubleFV, FImage> {
+		Gist<FImage> g;
 
+		public GISTExtractor() {
+			this.g=new Gist<FImage>();
+		}
+
+		public DoubleFV extractFeature(FImage object) {
+			// get the image
+			FImage image = object.getImage();
+			
+			// analyse it with GIST
+			g.analyseImage(image);
+
+			// return a normalised DoubleFV
+			return g.getResponse().normaliseFV();
+		}
+	}
 
 }
