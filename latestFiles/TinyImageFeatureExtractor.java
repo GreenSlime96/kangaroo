@@ -2,7 +2,6 @@ package uk.ac.soton.ecs.nb4g14.coursework3;
 
 import org.openimaj.feature.DoubleFV;
 import org.openimaj.feature.FeatureExtractor;
-import org.openimaj.feature.FloatFV;
 import org.openimaj.image.FImage;
 import org.openimaj.image.processing.resize.ResizeProcessor;
 

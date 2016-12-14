@@ -3,21 +3,13 @@ package uk.ac.soton.ecs.nb4g14.coursework3;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.commons.vfs2.FileSystemException;
 import org.openimaj.data.DataSource;
 import org.openimaj.data.dataset.Dataset;
-import org.openimaj.data.dataset.GroupedDataset;
-import org.openimaj.data.dataset.ListDataset;
 import org.openimaj.data.dataset.VFSGroupDataset;
 import org.openimaj.data.dataset.VFSListDataset;
 import org.openimaj.experiment.dataset.sampling.GroupedUniformRandomisedSampler;
-import org.openimaj.experiment.dataset.split.GroupedRandomSplitter;
-import org.openimaj.experiment.evaluation.classification.ClassificationEvaluator;
-import org.openimaj.experiment.evaluation.classification.ClassificationResult;
-import org.openimaj.experiment.evaluation.classification.analysers.confusionmatrix.CMAnalyser;
-import org.openimaj.experiment.evaluation.classification.analysers.confusionmatrix.CMResult;
 import org.openimaj.feature.DoubleFV;
 import org.openimaj.feature.FeatureExtractor;
 import org.openimaj.feature.local.data.LocalFeatureListDataSource;
@@ -35,9 +27,18 @@ import org.openimaj.util.pair.IntFloatPair;
 
 import de.bwaldvogel.liblinear.SolverType;
 
+/**
+ * Class RunTwo - Main implementation for the Bag-of-visual-words linear classifiers 
+ * using fixed size densely-sampled pixel patches algorithm.
+ * The class RunTwoTest was used to the best parameters to use when classifying the test dataset.
+ * 
+ * @author nb4g14 and kbp2g14
+ */
 public class RunTwo {
 	
 	public static void main(String[] args) throws FileSystemException {
+		
+		// ----------------------------------- Load the data -----------------------------------------
 		final String directory = System.getProperty("user.name").equals("khengboonpek")
 				? "/Users/khengboonpek/Downloads/" : "/home/nb4g14/University/ComputerVision/kangaroo/";
 		
@@ -47,21 +48,24 @@ public class RunTwo {
 		final VFSListDataset<FImage> query = 
 				new VFSListDataset<FImage>(directory  + "testing", ImageUtilities.FIMAGE_READER);
 		
-		final GroupedRandomSplitter<String, FImage> splits = new GroupedRandomSplitter<String, FImage>(allData, 75, 0, 25);
+		// ------------------------------------   Execution   -----------------------------------------
 		
+		//instance to provide the fixed-sized densely-sampled pixel patches for an image
 		DensePatch densePatch=new DensePatch(4, 4, 8, 8);
 		
+		//Hard assigner for visual words learned from the pixel patches of a subset of all training data
 		HardAssigner<float[], float[], IntFloatPair> assigner = 
-				trainQuantiser(GroupedUniformRandomisedSampler.sample(splits.getTrainingDataset(), 100), densePatch);
+				trainQuantiser(GroupedUniformRandomisedSampler.sample(allData, 100), densePatch);
 	
+		//FeatureExtractor based on bag-of-visual-words built from dense pixel patches
 		FeatureExtractor<DoubleFV, FImage> extractor = new BOVWDensePatchExtractor(densePatch, assigner);
 		
-		//------------------------------- Perform classification -----------------------------
-		//Perform linear classification
+		//train the annotator
 		LiblinearAnnotator<FImage, String> ann = new LiblinearAnnotator<FImage, String>(
 	            extractor, Mode.MULTICLASS, SolverType.L2R_L2LOSS_SVC, 1.0, 0.00001);
 		ann.train(allData);
 
+		//Annotate testing data
 		for (int i = 0; i < query.size(); i++) {
 			FImage image = query.get(i);
 			String name = query.getID(i);
@@ -80,38 +84,28 @@ public class RunTwo {
 	static HardAssigner<float[], float[], IntFloatPair> trainQuantiser(
 	        Dataset<FImage> sample, DensePatch densePatch)
 	{
-		//list to contain all features from our images
+		//list to contain all pixel patches from our images
 		List<LocalFeatureList<FloatKeypoint>> allkeys = new ArrayList<LocalFeatureList<FloatKeypoint>>();
 		
 		for (FImage rec : sample) {
 		
-		    //compute the DSIFT descriptors
+		    //compute the dense pixel patches
 		    densePatch.analyseImage(rec);
-		    //add all SIFT descriptors to the list
+		    
+		    //add them to the list
 		    allkeys.add(densePatch.getFloatKeypoints());
 		}
 		
-		//get the first max 10000 elements
-		if (allkeys.size() > 10000)
-		    allkeys = allkeys.subList(0, 10000);
-		
 		//we get an object ready to perform approximate K-means clustering based on KD Trees
-		FloatKMeans km = FloatKMeans.createKDTreeEnsemble(2000);
+		FloatKMeans km = FloatKMeans.createKDTreeEnsemble(500);
 		
-		//get all SIFT features in a Data Source
+		//get all Ddense patches  in a Data Source
 		DataSource<float[]> datasource = new LocalFeatureListDataSource<FloatKeypoint, float[]>(allkeys);
 		
 		//perform the clustering
 		FloatCentroidsResult result = km.cluster(datasource);
 		
-		for(float[] centroid:result.centroids){
-			for(int j=0;j<centroid.length;j++){
-				System.out.println(centroid[j]+" ");
-			}
-			System.out.println("");
-		}
-		
-		//get a hard assigner, which can assign new points to a cluster
+		//get a hard assigner, which can assign new keypoint to a cluster
 		return result.defaultHardAssigner();
 	}
 
